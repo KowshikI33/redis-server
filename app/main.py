@@ -1,6 +1,4 @@
-# Uncomment this to pass the first stage
 import socket
-
 
 def main():
     # Create a TCP/IP socket
@@ -9,13 +7,13 @@ def main():
 
     while True:
         print("Waiting for a connection...")
+        # blocking and nothing executes
         client_socket, addr = server_socket.accept()
         print(f"Connection from {addr} has been established.")
 
         # Send a hardcoded PONG response as soon as the client connects
         client_socket.sendall(b'+PONG\r\n')
         client_socket.close()
-
 
 if __name__ == "__main__":
     main()
