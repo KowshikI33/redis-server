@@ -7,7 +7,7 @@ def main():
 
     while True:
         print("Waiting for a connection...")
-        # blocking and nothing executes
+        # blocking line.
         client_socket, addr = server_socket.accept()
         print(f"Connection from {addr} has been established.")
 
