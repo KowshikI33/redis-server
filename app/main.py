@@ -1,6 +1,9 @@
 import socket
 import threading
 
+#simple in-memory database
+database = {}
+
 def handle_client(client_socket, addr):
     print(f"handling connection from {addr}")
     try:
@@ -9,21 +12,42 @@ def handle_client(client_socket, addr):
             if not data:
                 break
 
-            #decode and process commands
-            decoded_data = data.decode('utf-8').strip()
-            parts = decoded_data.split('\r\n')
-            #redis is case-insensitive
-            command = parts[2].upper() 
-
-            if command == 'ECHO':
-                message = parts[4] #the command is the 5th part
-                response = f"${len(message)}\r\n{message}\r\n"
-                client_socket.sendall(response.encode()) #response.encode() --> binary format data
-            else:
-                client_socket.sendall(b'+PONG\r\n')
+            response = process_command(data)
+            client_socket.sendall(response.encode())
     finally:
         client_socket.close()
         print(f"Connetion from {addr} closed")
+
+def process_command(data):
+    decoded_data = data.decode('utf-8').strip()
+    parts = decoded_data.split('\r\n')
+
+    #redis commands are case-insensitive
+    command = parts[2].upper() 
+
+    if command == 'SET':
+        key = parts[4]
+        value = parts[6]
+        return set_command(key, value)
+    elif command == 'GET':
+        key = parts[4]
+        return get_command(key)
+    elif command == 'ECHO':
+        message = parts[4]
+        return f"${len(message)}\r\n{message}\r\n"
+    else:
+        return '+PONG\r\n'
+
+def set_command(key, value):
+    database[key] = value
+    return '+OK\r\n'
+
+def get_command(key):
+    value = database.get(key)
+    if value is None:
+        return '$-1\r\n'  # Null bulk string for non-existent keys
+    else:
+        return f"${len(value)}\r\n{value}\r\n"
 
 def main():
     
