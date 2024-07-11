@@ -41,9 +41,9 @@ def process_command(data):
 def set_command(key, value, parts):
     expiry = None
 
-    if len(parts) > 6 and parts[7].upper() == 'PX':
+    if len(parts) > 8 and parts[8].upper() == 'PX':
         try:
-            expiry = time.time() + (int(parts[9]) / 1000) #conver ms to s
+            expiry = time.time() + (int(parts[10]) / 1000) #conver ms to s
         except (IndexError, ValueError):
             return '-ERR invalid expires time in set\r\n'
     
