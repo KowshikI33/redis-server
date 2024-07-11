@@ -1,8 +1,8 @@
 import socket
 import threading
+import time
 
-#simple in-memory database
-database = {}
+database = {} #store tuples: (value, expiry_time)
 
 def handle_client(client_socket, addr):
     print(f"handling connection from {addr}")
@@ -28,7 +28,7 @@ def process_command(data):
     if command == 'SET':
         key = parts[4]
         value = parts[6]
-        return set_command(key, value)
+        return set_command(key, value, parts)
     elif command == 'GET':
         key = parts[4]
         return get_command(key)
@@ -38,16 +38,41 @@ def process_command(data):
     else:
         return '+PONG\r\n'
 
-def set_command(key, value):
-    database[key] = value
+def set_command(key, value, parts):
+    expiry = None
+
+    if len(parts) > 6 and parts[7].upper() == 'PX':
+        try:
+            expiry = time.time() + (int(parts[9]) / 1000) #conver ms to s
+        except (IndexError, ValueError):
+            return '-ERR invalid expires time in set\r\n'
+    
+    database[key] = (value, expiry)
     return '+OK\r\n'
 
 def get_command(key):
-    value = database.get(key)
+    if is_expired(key):
+        if key in database:
+            del database[key] #remove expired key
+        return '$-1\r\n'  #Null bulk string for non-existent keys
+    
+    value, _ = database.get(key, (None, None))
+
     if value is None:
         return '$-1\r\n'  # Null bulk string for non-existent keys
     else:
         return f"${len(value)}\r\n{value}\r\n"
+
+    
+def is_expired(key):
+    if key not in database:
+        return True
+    _, expiry = database[key]
+
+    if expiry is None:
+        return False
+    
+    return time.time() > expiry
 
 def main():
     
