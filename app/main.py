@@ -5,7 +5,7 @@ import time
 
 database = {} #store tuples: (value, expiry_time)
 
-def handle_client(client_socket, addr):
+def handle_client(client_socket, addr, is_master):
     print(f"handling connection from {addr}")
     try:
         while True:
@@ -13,13 +13,13 @@ def handle_client(client_socket, addr):
             if not data:
                 break
 
-            response = process_command(data)
+            response = process_command(data, is_master)
             client_socket.sendall(response.encode())
     finally:
         client_socket.close()
         print(f"Connetion from {addr} closed")
 
-def process_command(data):
+def process_command(data, is_master):
     decoded_data = data.decode('utf-8').strip()
     parts = decoded_data.split('\r\n')
 
@@ -38,7 +38,7 @@ def process_command(data):
         return f"${len(message)}\r\n{message}\r\n"
     elif command == 'INFO':
         section = parts[4] if len(parts) > 4 else ""
-        return info_command(section)
+        return info_command(section, is_master)
     else:
         return '+PONG\r\n'
 
@@ -77,21 +77,23 @@ def is_expired(key):
     
     return time.time() > expiry
 
-def info_command(section):
+def info_command(section, is_master):
     if section.lower() == 'replication':
-        info = "role:master\r\n"
-        return f"${len(info)}\r\n{info}\r\n"
+        role = f"role:{'master' if is_master else 'slave'}"
+        return f"${len(role)}\r\n{role}\r\n"
     else:
         return "$-1\r\n"
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
     parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
+    parser.add_argument("--replicaof", help = "Host and port of the master server")
     args = parser.parse_args()
     port = args.port
+    is_master = args.replicaof is None
     
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
-    print(f"Server is running on localhost:{port}")
+    print(f"Server is running on localhost:{port} as {'master' if is_master else 'slave'}")
 
     while True:
         print("Waiting for a connection...")
@@ -100,7 +102,7 @@ def main():
         print(f"Connection from {addr} has been established.")
 
         #create and start a new thread to handle this client
-        client_thread = threading.Thread(target=handle_client, args=(client_socket, addr))
+        client_thread = threading.Thread(target=handle_client, args=(client_socket, addr, is_master))
         client_thread.start()
 
         print(f"Active connections: {threading.active_count() - 1}")
