@@ -1,3 +1,4 @@
+import argparse
 import socket
 import threading
 import time
@@ -43,7 +44,7 @@ def set_command(key, value, parts):
 
     if len(parts) > 8 and parts[8].upper() == 'PX':
         try:
-            expiry = time.time() + (int(parts[10]) / 1000) #conver ms to s
+            expiry = time.time() + (int(parts[10]) / 1000) #convert ms to s
         except (IndexError, ValueError):
             return '-ERR invalid expires time in set\r\n'
     
@@ -53,13 +54,13 @@ def set_command(key, value, parts):
 def get_command(key):
     if is_expired(key):
         if key in database:
-            del database[key] #remove expired key
-        return '$-1\r\n'  #Null bulk string for non-existent keys
+            del database[key] 
+        return '$-1\r\n' 
     
     value, _ = database.get(key, (None, None))
 
     if value is None:
-        return '$-1\r\n'  # Null bulk string for non-existent keys
+        return '$-1\r\n'  
     else:
         return f"${len(value)}\r\n{value}\r\n"
 
@@ -75,9 +76,13 @@ def is_expired(key):
     return time.time() > expiry
 
 def main():
+    parser = argparse.ArgumentParser(description='Redis Lite Server')
+    parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
+    args = parser.parse_args()
+    port = args.port
     
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    print("Server is running on localhost:6379")
+    server_socket = socket.create_server(("localhost", port), reuse_port=True)
+    print(f"Server is running on localhost:{port}")
 
     while True:
         print("Waiting for a connection...")
