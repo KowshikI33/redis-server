@@ -36,6 +36,9 @@ def process_command(data):
     elif command == 'ECHO':
         message = parts[4]
         return f"${len(message)}\r\n{message}\r\n"
+    elif command == 'INFO':
+        section = parts[4] if len(parts) > 4 else ""
+        return info_command(section)
     else:
         return '+PONG\r\n'
 
@@ -64,7 +67,6 @@ def get_command(key):
     else:
         return f"${len(value)}\r\n{value}\r\n"
 
-    
 def is_expired(key):
     if key not in database:
         return True
@@ -74,6 +76,13 @@ def is_expired(key):
         return False
     
     return time.time() > expiry
+
+def info_command(section):
+    if section.lower() == 'replication':
+        info = "role:master\r\n"
+        return f"{len(info)}\r\n{info}\r\n"
+    else:
+        return "$-1\r\n"
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
