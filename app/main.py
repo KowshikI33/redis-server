@@ -87,19 +87,35 @@ def info_command(section, is_master):
             f"master_repl_offset:{MASTER_REPL_OFFSET}"
         ]
         info_str = "\r\n".join(info)
-        #info_str_final = f"${len(info_str)}\r\n{info_str}\r\n"
         return f"${len(info_str)}\r\n{info_str}\r\n"
     else:
         return "$-1\r\n"
+
+def connect_to_master(master_host, master_port):
+    master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    master_socket.connect((master_host, master_port))
+    print(f"Connected to master at {master_host}:{master_port}")
+
+    #Send PING
+    ping_command = "*1\r\n$4\r\nPING\r\n"
+    master_socket.sendall(ping_command)
+    print("Sent PING to master")
+
+    return master_socket
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
     parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
     parser.add_argument("--replicaof", help = "Host and port of the master server")
     args = parser.parse_args()
+    
     port = args.port
     is_master = args.replicaof is None
-    
+
+    if not is_master:
+        master_host, master_port = args.replicaof.split()
+        master_socket = connect_to_master(master_host, int(master_port))
+
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     print(f"Server is running on localhost:{port} as {'master' if is_master else 'slave'}")
 
