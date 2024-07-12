@@ -80,7 +80,7 @@ def is_expired(key):
 def info_command(section):
     if section.lower() == 'replication':
         info = "role:master\r\n"
-        return f"{len(info)}\r\n{info}\r\n"
+        return f"${len(info)}\r\n{info}\r\n"
     else:
         return "$-1\r\n"
 
