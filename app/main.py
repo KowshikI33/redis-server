@@ -4,6 +4,8 @@ import threading
 import time
 
 database = {} #store tuples: (value, expiry_time)
+MASTER_REPLID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # Hardcoded 40-character string
+MASTER_REPL_OFFSET = 0
 
 def handle_client(client_socket, addr, is_master):
     print(f"handling connection from {addr}")
@@ -79,8 +81,14 @@ def is_expired(key):
 
 def info_command(section, is_master):
     if section.lower() == 'replication':
-        role = f"role:{'master' if is_master else 'slave'}"
-        return f"${len(role)}\r\n{role}\r\n"
+        info = [
+            f"role:{'master' if is_master else 'slave'}",
+            f"master_replid:{MASTER_REPLID}",
+            f"master_repl_offset:{MASTER_REPL_OFFSET}"
+        ]
+        info_str = "\r\n".join(info)
+        #info_str_final = f"${len(info_str)}\r\n{info_str}\r\n"
+        return f"${len(info_str)}\r\n{info_str}\r\n"
     else:
         return "$-1\r\n"
 
