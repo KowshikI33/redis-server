@@ -2,10 +2,12 @@ import argparse
 import socket
 import threading
 import time
+import base64
 
 database = {} #store tuples: (value, expiry_time)
 MASTER_REPLID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # Hardcoded 40-character string
 MASTER_REPL_OFFSET = 0
+EMPTY_RDB = base64.b64decode("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
 
 def handle_client(client_socket, addr, is_master):
     print(f"handling connection from {addr}")
@@ -15,11 +17,22 @@ def handle_client(client_socket, addr, is_master):
             if not data:
                 break
 
-            response = process_command(data, is_master)
-            client_socket.sendall(response.encode())
+            response = process_command(data, is_master) #can be tuple/str/byte string; tuple can contain str/byte
+            send_response(client_socket, response)
     finally:
         client_socket.close()
         print(f"Connetion from {addr} closed")
+
+def send_response(client_socket, response):
+    if isinstance(response, tuple):
+        for resp in response:
+            if isinstance(resp, str):
+                resp = resp.encode()
+            client_socket.sendall(resp)
+    elif isinstance(response, str):
+        client_socket.sendall(response.encode())
+    else:
+        client_socket.sendall(response)
 
 def process_command(data, is_master):
     decoded_data = data.decode('utf-8').strip()
@@ -44,8 +57,7 @@ def process_command(data, is_master):
     elif command == "REPLCONF":
         return "+OK\r\n"
     elif command == "PSYNC":
-        full_resync_resopnse = f"+FULLRESYNC {MASTER_REPLID} {MASTER_REPL_OFFSET}\r\n"
-        return full_resync_resopnse
+        return handle_psync()
     else:
         return '+PONG\r\n'
 
@@ -136,6 +148,11 @@ def send_pysnc_to_master(master_socket):
 
     response = master_socket.recv(1024).decode()
     print(f"Received from master (PSYNC): {response}")
+
+def handle_psync():
+    full_resync_resopnse = f"+FULLRESYNC {MASTER_REPLID} {MASTER_REPL_OFFSET}\r\n"
+    rdb_response = f"${len(EMPTY_RDB)}\r\n".encode() + EMPTY_RDB
+    return (full_resync_resopnse, rdb_response)
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
