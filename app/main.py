@@ -8,7 +8,7 @@ database = {} #store tuples: (value, expiry_time)
 MASTER_REPLID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # Hardcoded 40-character string
 MASTER_REPL_OFFSET = 0
 EMPTY_RDB = base64.b64decode("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
-replica_connections = []
+replica_sockets = []
 
 def handle_client(client_socket, addr, is_master):
     print(f"handling connection from {addr}")
@@ -122,9 +122,7 @@ def connect_to_master(master_host, master_port, replica_port):
     print(f"Connected to master at {master_host}:{master_port}")
 
     send_ping_to_master(master_socket)
-
     send_replconf_to_master(master_socket, replica_port)
-
     send_pysnc_to_master(master_socket)
 
     return master_socket
@@ -164,31 +162,52 @@ def handle_psync():
 
 def handle_replconf(parts, client_socket):
     if parts[4] == "listening-port":
-        replica_port = int(parts[6])
-        replica_ip = client_socket.getpeername()[0]
-        try:
-            replica_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            replica_socket.connect((replica_ip, replica_port))
-            replica_connections.append(replica_socket)
-            print(f"Connected to the replica at {replica_ip}:{replica_port}")
-        except Exception as e:
-            print(f"Failed to connect to replica at {replica_ip}:{replica_port}: {e}")
+        replica_ip, replica_port = client_socket.getpeername()[0], client_socket.getpeername()[1]
+        replica_sockets.append(client_socket)
+        print(f"Connected to the replica at {replica_ip}:{replica_port}")
     return "+OK\r\n"
 
 def propagate_command(command):
-    for replica_connection in replica_connections:
+    for replica_socket in replica_sockets:
+        #should remove socket which are not connected
         try:
-            replica_connection.sendall(command.encode())
-            ip, port = replica_connection.getpeername()
+            replica_socket.sendall(command.encode())
+            ip, port = replica_socket.getpeername()
             print(f"Successfully propagated to {ip}:{port}")
         except Exception as e:
             try:
-                ip, port = replica_connection.getpeername()
+                ip, port = replica_socket.getpeername()
             except:
                 ip, port = "unkonwn", "unknown"
             print(f"Failed to propagate to {ip}:{port}: {e}")
 
+def listen_to_master(master_socket):
+    while True:
+        try:
+            data = master_socket.recv(1024)
+            if not data:
+                break
+            print(f"received data from master {data}")
+            process_master_command(data)
+        except Exception as e:
+            print(f"Error receiving data from master: {e}")
+            break
+    print("Connection to master closed")
 
+def process_master_command(data):
+    try:
+        decoded_data = data.decode('utf-8').strip()
+        parts = decoded_data.split('\r\n')
+        command = parts[2].upper() 
+        if command == 'SET':
+            key = parts[4]
+            value = parts[6]
+            set_command(key, value, parts)
+        # Add other commands as needed
+    except UnicodeDecodeError:
+        print(f"Received non-UTF-8 data (perhaps empty rdb file), unable to process. Data: {data}")
+    except Exception as e:
+        print(f"Error processing command: {e}")
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
     parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
@@ -204,6 +223,10 @@ def main():
     if not is_master:
         master_host, master_port = args.replicaof.split()
         master_socket = connect_to_master(master_host, int(master_port), int(port))
+
+        #start a new thread to listen for commands from master
+        master_listener_thread = threading.Thread(target=listen_to_master, args=(master_socket,))
+        master_listener_thread.start()
 
     while True:
         print("Waiting for a connection...")
