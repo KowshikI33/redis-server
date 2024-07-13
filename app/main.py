@@ -8,6 +8,7 @@ database = {} #store tuples: (value, expiry_time)
 MASTER_REPLID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # Hardcoded 40-character string
 MASTER_REPL_OFFSET = 0
 EMPTY_RDB = base64.b64decode("UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog==")
+replica_connections = []
 
 def handle_client(client_socket, addr, is_master):
     print(f"handling connection from {addr}")
@@ -16,8 +17,8 @@ def handle_client(client_socket, addr, is_master):
             data = client_socket.recv(1024)
             if not data:
                 break
-
-            response = process_command(data, is_master) #can be tuple/str/byte string; tuple can contain str/byte
+            #can be tuple/str/byte string; tuple can contain str/byte
+            response = process_command(data, is_master, client_socket)
             send_response(client_socket, response)
     finally:
         client_socket.close()
@@ -34,7 +35,7 @@ def send_response(client_socket, response):
     else:
         client_socket.sendall(response)
 
-def process_command(data, is_master):
+def process_command(data, is_master, client_socket):
     decoded_data = data.decode('utf-8').strip()
     parts = decoded_data.split('\r\n')
 
@@ -54,8 +55,11 @@ def process_command(data, is_master):
     elif command == 'INFO':
         section = parts[4] if len(parts) > 4 else ""
         return info_command(section, is_master)
-    elif command == "REPLCONF":
-        return "+OK\r\n"
+    elif command == "REPLCONF": 
+        #Only master should receive REPLCONF command
+        if is_master:
+            return handle_replconf(parts, client_socket)
+        return '$-1\r\n'
     elif command == "PSYNC":
         return handle_psync()
     else:
@@ -71,6 +75,10 @@ def set_command(key, value, parts):
             return '-ERR invalid expires time in set\r\n'
     
     database[key] = (value, expiry)
+
+    #propagate command to replica
+    propagate_command("\r\n".join(parts))
+    
     return '+OK\r\n'
 
 def get_command(key):
@@ -154,6 +162,33 @@ def handle_psync():
     rdb_response = f"${len(EMPTY_RDB)}\r\n".encode() + EMPTY_RDB
     return (full_resync_resopnse, rdb_response)
 
+def handle_replconf(parts, client_socket):
+    if parts[4] == "listening-port":
+        replica_port = int(parts[6])
+        replica_ip = client_socket.getpeername()[0]
+        try:
+            replica_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            replica_socket.connect((replica_ip, replica_port))
+            replica_connections.append(replica_socket)
+            print(f"Connected to the replica at {replica_ip}:{replica_port}")
+        except Exception as e:
+            print(f"Failed to connect to replica at {replica_ip}:{replica_port}: {e}")
+    return "+OK\r\n"
+
+def propagate_command(command):
+    for replica_connection in replica_connections:
+        try:
+            replica_connection.sendall(command.encode())
+            ip, port = replica_connection.getpeername()
+            print(f"Successfully propagated to {ip}:{port}")
+        except Exception as e:
+            try:
+                ip, port = replica_connection.getpeername()
+            except:
+                ip, port = "unkonwn", "unknown"
+            print(f"Failed to propagate to {ip}:{port}: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
     parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
@@ -163,12 +198,12 @@ def main():
     port = args.port
     is_master = args.replicaof is None
 
+    server_socket = socket.create_server(("localhost", port), reuse_port=True)
+    print(f"Server is running on localhost:{port} as {'master' if is_master else 'slave'}")
+
     if not is_master:
         master_host, master_port = args.replicaof.split()
         master_socket = connect_to_master(master_host, int(master_port), int(port))
-
-    server_socket = socket.create_server(("localhost", port), reuse_port=True)
-    print(f"Server is running on localhost:{port} as {'master' if is_master else 'slave'}")
 
     while True:
         print("Waiting for a connection...")
