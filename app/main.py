@@ -113,7 +113,7 @@ def send_ping_to_master(master_socket):
     ping_command = "*1\r\n$4\r\nPING\r\n"
     master_socket.sendall(ping_command.encode()) #or can use b"string" instead of "encode"
     print("Sent PING to master")
-    response = master_socket.recv(1024) #server just blocks and waits here for response back
+    response = master_socket.recv(1024)
     print("Recceived from master:", response.decode())
 
 def send_replconf_to_master(master_socket, replica_port):
