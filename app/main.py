@@ -98,9 +98,9 @@ def connect_to_master(master_host, master_port):
 
     #Send PING
     ping_command = "*1\r\n$4\r\nPING\r\n"
-    master_socket.sendall(ping_command)
+    master_socket.sendall(ping_command.encode()) #or can use b in front of ping command instead of "encode"
     print("Sent PING to master")
-
+    
     return master_socket
 
 def main():
