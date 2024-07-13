@@ -41,6 +41,8 @@ def process_command(data, is_master):
     elif command == 'INFO':
         section = parts[4] if len(parts) > 4 else ""
         return info_command(section, is_master)
+    elif command == "REPLCONF":
+        return "+OK\r\n"
     else:
         return '+PONG\r\n'
 
@@ -91,17 +93,36 @@ def info_command(section, is_master):
     else:
         return "$-1\r\n"
 
-def connect_to_master(master_host, master_port):
+def connect_to_master(master_host, master_port, replica_port):
     master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     master_socket.connect((master_host, master_port))
     print(f"Connected to master at {master_host}:{master_port}")
 
-    #Send PING
+    send_ping_to_master(master_socket)
+
+    send_replconf_to_master(master_socket, replica_port)
+
+    return master_socket
+
+def send_ping_to_master(master_socket):
     ping_command = "*1\r\n$4\r\nPING\r\n"
     master_socket.sendall(ping_command.encode()) #or can use b in front of ping command instead of "encode"
     print("Sent PING to master")
-    
-    return master_socket
+    response = master_socket.recv(1024) #server just blocks and waits here for response back
+    print("Recceived from master:", response.decode())
+
+def send_replconf_to_master(master_socket, replica_port):
+    #send replica listening port
+    replconf_listening = f"*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n${len(str(replica_port))}\r\n{replica_port}\r\n"
+    master_socket.sendall(replconf_listening.encode())
+    response = master_socket.recv(1024)
+    print("Received from master (REPLCONF listening-port):", response.decode())
+
+    #Second REPLCONF command: REPLCONF capa psync2
+    replconf_capa = "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"
+    master_socket.sendall(replconf_capa.encode())
+    response = master_socket.recv(1024)
+    print("Received from master (REPLCONF capa psync2):", response.decode())
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
@@ -114,7 +135,7 @@ def main():
 
     if not is_master:
         master_host, master_port = args.replicaof.split()
-        master_socket = connect_to_master(master_host, int(master_port))
+        master_socket = connect_to_master(master_host, int(master_port), int(port))
 
     server_socket = socket.create_server(("localhost", port), reuse_port=True)
     print(f"Server is running on localhost:{port} as {'master' if is_master else 'slave'}")
