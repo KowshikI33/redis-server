@@ -43,6 +43,9 @@ def process_command(data, is_master):
         return info_command(section, is_master)
     elif command == "REPLCONF":
         return "+OK\r\n"
+    elif command == "PSYNC":
+        full_resync_resopnse = f"+FULLRESYNC {MASTER_REPLID} {MASTER_REPL_OFFSET}\r\n"
+        return full_resync_resopnse
     else:
         return '+PONG\r\n'
 
@@ -102,6 +105,8 @@ def connect_to_master(master_host, master_port, replica_port):
 
     send_replconf_to_master(master_socket, replica_port)
 
+    send_pysnc_to_master(master_socket)
+
     return master_socket
 
 def send_ping_to_master(master_socket):
@@ -123,6 +128,14 @@ def send_replconf_to_master(master_socket, replica_port):
     master_socket.sendall(replconf_capa.encode())
     response = master_socket.recv(1024)
     print("Received from master (REPLCONF capa psync2):", response.decode())
+
+def send_pysnc_to_master(master_socket):
+    # PSYNC ? -1 command
+    psync_command = "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"
+    master_socket.sendall(psync_command.encode())
+
+    response = master_socket.recv(1024).decode()
+    print(f"Received from master (PSYNC): {response}")
 
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
