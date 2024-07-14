@@ -77,7 +77,7 @@ def set_command(key, value, parts):
     database[key] = (value, expiry)
 
     #propagate command to replica
-    propagate_command("\r\n".join(parts))
+    propagate_command("\r\n".join(parts) + "\r\n")
     
     return '+OK\r\n'
 
