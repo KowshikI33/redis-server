@@ -36,15 +36,54 @@ def send_response(client_socket, response):
     else:
         client_socket.sendall(response)
 
+def split_commands(data):
+    print(f"full byte string for split_commands {data}")
+    commands = []
+    i = 0
+
+    while i < len(data):
+        if data[i:i+1] == b'$':
+            # This is likely the RDB file or a bulk string
+            length_delimiter_start = data.index(b'\r\n', i)
+            length = int(data[i+1:length_delimiter_start])
+            content_start = length_delimiter_start + 2
+            content_end = content_start + length
+
+            #check if there is room for \r\n at the end
+            if content_end + 2 <= len(data) and data[content_end: content_end + 2] == b'\r\n':
+                command_end = content_end + 2
+            else:
+                command_end = content_end
+            
+            commands.append(data[i:command_end])
+            i = command_end
+        elif data[i:i+1] == b'*':
+            # This is a Redis command
+            command_end = data.index(b'\r\n', i)
+            num_parts = int(data[i+1:command_end])
+            for _ in range(num_parts):
+                command_end = data.index(b'\r\n', command_end + 1)
+                command_end = data.index(b'\r\n', command_end + 1)
+            commands.append(data[i:command_end+2])
+            i = command_end + 2
+        else:
+            # Unexpected data
+            raise ValueError(f"Unexpected data format at position {i}")
+    
+    print(f"all split commands are: {commands}")
+    return commands 
+
 def process_commands(data, command_processor, *args):
     try:
-        decoded_data = data.decode('utf-8')
-        print(f"received data {decoded_data}")
-        commands = decoded_data.split('*')[1:]
+        commands = split_commands(data)
         responses = []
 
         for command in commands:
-            parts = command.strip().split('\r\n')
+            if not command.endswith(b'\r\n'):
+                print(f"Received RDB file data, length:{len(command)}")
+                continue
+            decoded_command = command.decode('utf-8').strip()
+            parts = decoded_command.split('\r\n')
             if parts:
                 response = command_processor(parts, *args)
                 if response is not None:
