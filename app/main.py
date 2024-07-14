@@ -18,7 +18,7 @@ def handle_client(client_socket, addr, is_master):
             data = client_socket.recv(1024)
             if not data:
                 break
-            #can be tuple/str/byte string; tuple can contain str/byte
+            #always an array, and array can contain tuple(str/bytes tring)/str/byte string
             response = process_command(data, is_master, client_socket)
             send_response(client_socket, response)
     finally:
@@ -115,10 +115,7 @@ def process_single_command(parts, is_master, client_socket):
         section = parts[4] if len(parts) > 4 else ""
         return info_command(section, is_master)
     elif command == "REPLCONF": 
-        #Only master should receive REPLCONF command
-        if is_master:
-            return handle_replconf(parts, client_socket)
-        return '$-1\r\n'
+        return handle_replconf(parts, client_socket)
     elif command == "PSYNC":
         return handle_psync()
     else:
@@ -237,6 +234,10 @@ def handle_replconf(parts, client_socket):
         replica_ip, replica_port = client_socket.getpeername()[0], client_socket.getpeername()[1]
         replica_sockets.append(client_socket)
         print(f"Connected to the replica at {replica_ip}:{replica_port}")
+    elif parts[4] == "getack": #coming from master
+        return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
+
+    
     return "+OK\r\n"
 
 def propagate_command(command):
