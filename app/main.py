@@ -26,15 +26,17 @@ def handle_client(client_socket, addr, is_master):
         print(f"Connetion from {addr} closed")
 
 def send_response(client_socket, response):
-    if isinstance(response, tuple):
-        for resp in response:
-            if isinstance(resp, str):
-                resp = resp.encode()
+    #always an array and it could contain tuple, str or byte string
+    for resp in response:
+        if isinstance(resp, tuple):
+            for r in resp:
+                if isinstance(r, str):
+                    r = r.encode()
+                client_socket.sendall(r)
+        elif isinstance(resp, str):
+            client_socket.sendall(resp.encode())
+        else:
             client_socket.sendall(resp)
-    elif isinstance(response, str):
-        client_socket.sendall(response.encode())
-    else:
-        client_socket.sendall(response)
 
 def split_commands(data):
     print(f"full byte string for split_commands {data}")
@@ -88,11 +90,13 @@ def process_commands(data, command_processor, *args):
                 response = command_processor(parts, *args)
                 if response is not None:
                     responses.append(response)
-        return ''.join(responses) if responses else '$-1\r\n'
+        return responses if responses else '$-1\r\n'
     except UnicodeDecodeError:
         print(f"Received non-UTF-8 data (perhaps empty RDB file), unable to process. Data: {data}")
+        return '$-1\r\n'
     except Exception as e:
         print(f"Error processing commands: {e}")
+        return '$-1\r\n'
 
 def process_single_command(parts, is_master, client_socket):
     command = parts[2].upper() 
