@@ -4,7 +4,7 @@ import threading
 import time
 import base64
 
-trigger_update = False #
+trigger_update = True #
 database = {} #store tuples: (value, expiry_time)
 MASTER_REPLID = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"  # Hardcoded 40-character string
 MASTER_REPL_OFFSET = 0
