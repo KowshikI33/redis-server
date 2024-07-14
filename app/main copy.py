@@ -91,7 +91,7 @@ def process_commands(data, command_processor, *args):
                 response = command_processor(parts, *args)
                 if response is not None:
                     responses.append(response)
-        return responses if responses else '$-1\r\n'
+        return responses if responses else ['$-1\r\n']
     except UnicodeDecodeError:
         print(f"Received non-UTF-8 data (perhaps empty RDB file), unable to process. Data: {data}")
         return ['$-1\r\n']
@@ -130,7 +130,7 @@ def process_master_single_command(parts):
         set_command(key, value, parts)
         return None
     elif command == "REPLCONF":
-        return handle_replconf(parts, None)
+        return ["*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"]
     else:
         return None
 
@@ -242,13 +242,13 @@ def handle_replconf(parts, client_socket = None):
         replica_ip, replica_port = client_socket.getpeername()[0], client_socket.getpeername()[1]
         replica_sockets.append(client_socket)
         print(f"Connected to the replica at {replica_ip}:{replica_port}")
-    elif parts[4].lower() == "getack": 
-        #if coming from master then propagate command
-        if parts[6] == '*':
-            propagate_command(propagate_command("\r\n".join(parts) + "\r\n"))
-        #replica responding with offste
-        else:
-            return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
+    # elif parts[4].lower() == "getack": 
+    #     #if coming from master then propagate command
+    #     if parts[6] == '*':
+    #         propagate_command(propagate_command("\r\n".join(parts) + "\r\n"))
+    #     #replica responding with offste
+    #     else:
+    #         return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
     return "+OK\r\n"
 
 def propagate_command(command):
@@ -274,9 +274,9 @@ def listen_to_master(master_socket):
             print(f"received data from master {data}")
             response = process_master_command(data)
             print(f"received response for listen_to_master {response}")
-            # if response is not None:
-            #     print(f"sending data to master {response}")
-            #     send_response(master_socket, response)
+            if response is not None:
+                print(f"sending data to master {response}")
+                send_response(master_socket, response)
         except Exception as e:
             print(f"Error receiving data from master: {e}")
             break
