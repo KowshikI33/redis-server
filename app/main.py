@@ -230,14 +230,17 @@ def handle_psync():
     return (full_resync_resopnse, rdb_response)
 
 def handle_replconf(parts, client_socket):
-    if parts[4] == "listening-port":
+    if parts[4].lower() == "listening-port":
         replica_ip, replica_port = client_socket.getpeername()[0], client_socket.getpeername()[1]
         replica_sockets.append(client_socket)
         print(f"Connected to the replica at {replica_ip}:{replica_port}")
-    elif parts[4] == "getack": #coming from master
-        return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
-
-    
+    elif parts[4].lower() == "getack": 
+        #if coming from master then propagate command
+        if parts[6] == '*':
+            propagate_command(propagate_command("\r\n".join(parts) + "\r\n"))
+        #replica responding with offste
+        else:
+            return "*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"
     return "+OK\r\n"
 
 def propagate_command(command):
