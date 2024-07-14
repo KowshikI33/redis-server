@@ -128,6 +128,9 @@ def process_master_single_command(parts):
         value = parts[6]
         set_command(key, value, parts)
 
+    elif command == "REPLCONF":
+        return handle_replconf(parts, None)
+
 def process_command(data, is_master, client_socket):
     return process_commands(data, process_single_command, is_master, client_socket)
 
@@ -194,6 +197,8 @@ def connect_to_master(master_host, master_port, replica_port):
     send_replconf_to_master(master_socket, replica_port)
     send_pysnc_to_master(master_socket)
 
+    print(f"finished connectig with master")
+
     return master_socket
 
 def send_ping_to_master(master_socket):
@@ -229,7 +234,7 @@ def handle_psync():
     rdb_response = f"${len(EMPTY_RDB)}\r\n".encode() + EMPTY_RDB
     return (full_resync_resopnse, rdb_response)
 
-def handle_replconf(parts, client_socket):
+def handle_replconf(parts, client_socket = None):
     if parts[4].lower() == "listening-port":
         replica_ip, replica_port = client_socket.getpeername()[0], client_socket.getpeername()[1]
         replica_sockets.append(client_socket)
