@@ -36,12 +36,26 @@ def send_response(client_socket, response):
     else:
         client_socket.sendall(response)
 
-def process_command(data, is_master, client_socket):
-    decoded_data = data.decode('utf-8').strip()
-    print(f"received data {decoded_data}")
-    parts = decoded_data.split('\r\n')
+def process_commands(data, command_processor, *args):
+    try:
+        decoded_data = data.decode('utf-8')
+        print(f"received data {decoded_data}")
+        commands = decoded_data.split('*')[1:]
+        responses = []
 
-    #redis commands are case-insensitive
+        for command in commands:
+            parts = command.strip().split('\r\n')
+            if parts:
+                response = command_processor(parts, *args)
+                if response is not None:
+                    responses.append(response)
+        return ''.join(responses) if responses else '$-1\r\n'
+    except UnicodeDecodeError:
+        print(f"Received non-UTF-8 data (perhaps empty RDB file), unable to process. Data: {data}")
+    except Exception as e:
+        print(f"Error processing commands: {e}")
+
+def process_single_command(parts, is_master, client_socket):
     command = parts[2].upper() 
 
     if command == 'SET':
@@ -66,6 +80,19 @@ def process_command(data, is_master, client_socket):
         return handle_psync()
     else:
         return '+PONG\r\n'
+
+def process_master_single_command(parts):
+    command = parts[2].upper() 
+    if command == 'SET':
+        key = parts[4]
+        value = parts[6]
+        set_command(key, value, parts)
+
+def process_command(data, is_master, client_socket):
+    return process_commands(data, process_single_command, is_master, client_socket)
+
+def process_master_command(data):
+    return process_commands(data, process_master_single_command)
 
 def set_command(key, value, parts):
     expiry = None
@@ -196,20 +223,6 @@ def listen_to_master(master_socket):
             break
     print("Connection to master closed")
 
-def process_master_command(data):
-    try:
-        decoded_data = data.decode('utf-8').strip()
-        parts = decoded_data.split('\r\n')
-        command = parts[2].upper() 
-        if command == 'SET':
-            key = parts[4]
-            value = parts[6]
-            set_command(key, value, parts)
-        # Add other commands as needed
-    except UnicodeDecodeError:
-        print(f"Received non-UTF-8 data (perhaps empty rdb file), unable to process. Data: {data}")
-    except Exception as e:
-        print(f"Error processing command: {e}")
 def main():
     parser = argparse.ArgumentParser(description='Redis Lite Server')
     parser.add_argument("--port", type = int, default = 6379, help = "port to run the server on")
